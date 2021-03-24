@@ -1,6 +1,6 @@
 {
   "name": "homebridge-states",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "An homebridge plugin to manage home automation states",
   "main": "dist/accessory.js",
   "scripts": {
