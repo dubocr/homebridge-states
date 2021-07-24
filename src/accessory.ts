@@ -7,6 +7,7 @@ import {
     Logging,
     Service,
 } from 'homebridge';
+import storage from 'node-persist';
 
 /*
  * IMPORTANT NOTICE
@@ -44,8 +45,6 @@ export = (api: API) => {
 };
 
 class States implements AccessoryPlugin {
-
-    private readonly log: Logging;
     private readonly name: string;
 
     private readonly service: Service;
@@ -54,24 +53,10 @@ class States implements AccessoryPlugin {
 
     private readonly storage;
 
-    constructor(log: Logging, config: AccessoryConfig) {
-        this.log = log;
+    constructor(private log: Logging, private config: AccessoryConfig) {
         this.name = config.name;
-
-        const dir = homebridge.user.persistPath();
-        this.storage = require('node-persist');
-        this.storage.initSync({ dir: dir, forgiveParseErrors: true });
-        const lastState = this.storage.getItemSync(this.name) || 0;
-
         this.service = new hap.Service.StatefulProgrammableSwitch(this.name, 'state');
-        this.service.getCharacteristic(hap.Characteristic.ProgrammableSwitchOutputState)
-            .setProps({ minValue: 0, maxValue: config.states.length - 1 })
-            .onSet((value: CharacteristicValue) => {
-                const i = value as number;
-                this.storage.setItemSync(this.name, value);
-                this.stateServices[i].getCharacteristic(hap.Characteristic.ProgrammableSwitchEvent).setValue(0);
-            })
-            .value = lastState;
+        this.storage = storage.create();
 
         let i = 1;
         for (const state of config.states) {
@@ -88,6 +73,21 @@ class States implements AccessoryPlugin {
             .setCharacteristic(hap.Characteristic.Manufacturer, 'github.com/dubocr')
             .setCharacteristic(hap.Characteristic.SerialNumber, '000-001')
             .setCharacteristic(hap.Characteristic.Model, 'States');
+
+        this.init().catch(log.error.bind(this));
+    }
+
+    private async init() {
+        const dir = homebridge.user.persistPath();
+        this.storage.init({ dir: dir, forgiveParseErrors: true });
+        this.service.getCharacteristic(hap.Characteristic.ProgrammableSwitchOutputState)
+            .setProps({ minValue: 0, maxValue: this.config.states.length - 1 })
+            .onSet(async (value: CharacteristicValue) => {
+                const i = value as number;
+                await this.storage.setItem(this.name, value);
+                this.stateServices[i].getCharacteristic(hap.Characteristic.ProgrammableSwitchEvent).setValue(0);
+            })
+            .value = await this.storage.getItem(this.name) || 0;
     }
 
     /*
